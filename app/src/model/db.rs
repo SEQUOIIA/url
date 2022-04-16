@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel::{ConnectionResult, SqliteConnection};
 
-const DATABASE_URL : &str = "db";
+pub const DATABASE_URL : &str = "db";
 
 pub fn get_db_conn() -> ConnectionResult<SqliteConnection> {
     let data_dir_path = std::env::var("URL_DATA_DIR").unwrap_or_else(|_| {"./".to_owned()});

@@ -6,10 +6,13 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 mod model;
+mod web;
+mod schema;
 
 use diesel_migrations::{embed_migrations};
 
 embed_migrations!("../migrations");
+
 
 fn main() {
     setup_tracing(Some(tracing::Level::TRACE));
@@ -22,8 +25,8 @@ fn main() {
         embedded_migrations::run_with_output(&conn, &mut std::io::stdout());
     }
 
+    web::start_server();
 }
-
 
 fn setup_tracing(log_level : Option<tracing::Level>) {
     let max_level = log_level.unwrap_or(tracing::Level::TRACE);
@@ -32,6 +35,7 @@ fn setup_tracing(log_level : Option<tracing::Level>) {
         .add_directive("reqwest=info".parse().unwrap())
         .add_directive("mio=info".parse().unwrap())
         .add_directive("want=info".parse().unwrap())
+        .add_directive("actix_web=info".parse().unwrap())
         .add_directive("hyper=info".parse().unwrap());
 
 
