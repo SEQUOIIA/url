@@ -5,7 +5,7 @@ use std::future::{ready, Ready};
 use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, BelongingToDsl, SqliteConnection};
 use diesel::r2d2::{self, ConnectionManager};
 use futures_util::future::LocalBoxFuture;
-use crate::model::url::UrlDb;
+use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
 
@@ -32,7 +32,7 @@ pub async fn start_server() {
         .await;
 }
 
-async fn url_handler(req: HttpRequest, pool: web::Data<DbPool>,) -> Result<HttpResponse, Error> {
+async fn url_handler(req: HttpRequest, pool: web::Data<DbPool>) -> Result<HttpResponse, Error> {
     info!("url_handler triggered");
     if req.method().as_str() != "GET" {
         return Ok(HttpResponse::MethodNotAllowed().finish())
@@ -53,13 +53,38 @@ async fn url_handler(req: HttpRequest, pool: web::Data<DbPool>,) -> Result<HttpR
     }
 }
 
-async fn new_url_handler(req: HttpRequest, body : web::Bytes) -> impl Responder {
-    info!("new_url_handler triggered");
+nano_id::gen!(
+    url_id,
+    64,
+    b"_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+);
+
+async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
     if req.method().as_str() != "POST" {
-        return HttpResponse::MethodNotAllowed().finish()
+        return Ok(HttpResponse::MethodNotAllowed().finish());
     }
 
-    HttpResponse::Ok().finish()
+    let req_body : UrlRequest = match serde_json::from_slice(&body) {
+        Ok(val) => val,
+        Err(err) => {
+            println!("{}", err);
+            return Ok(HttpResponse::BadRequest().finish());
+        }
+    };
+
+    let id = url_id::<5>();
+
+    let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
+    let db_entry = UrlDbInsert {
+        id: id.clone(),
+        url: req_body.url
+    };
+    diesel::insert_into(schema::urls::table)
+        .values(&db_entry)
+        .execute(&conn)
+        .expect("Unable to create URL entry");
+
+    Ok(HttpResponse::Ok().body(format!("http://localhost:8380/{}", id)))
 }
 
 // There are two steps in middleware processing.

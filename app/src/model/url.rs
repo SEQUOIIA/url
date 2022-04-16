@@ -1,10 +1,12 @@
 use crate::schema::{urls};
+use serde::{Serialize, Deserialize};
 
 pub struct Url {
     pub id : String,
     pub url : String
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct UrlRequest {
     pub id : Option<String>,
     pub url : String,
