@@ -55,8 +55,8 @@ async fn url_handler(req: HttpRequest, pool: web::Data<DbPool>) -> Result<HttpRe
 
 nano_id::gen!(
     url_id,
-    64,
-    b"_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    62,
+    b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 );
 
 async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
