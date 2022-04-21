@@ -1,15 +1,9 @@
-use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, dev::{self, Service, ServiceRequest, ServiceResponse, Transform}, Scope, Responder, HttpResponse};
-use http::{HeaderValue, header::HeaderName};
-
-use std::future::{ready, Ready};
-use actix_web::web::Bytes;
-use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, BelongingToDsl, SqliteConnection};
+use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, HttpResponse};
+use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, SqliteConnection};
 use diesel::r2d2::{self, ConnectionManager};
-use futures_util::future::LocalBoxFuture;
 use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
-use serde::Deserialize;
 use crate::api::{DefaultHeaders, AuthMiddleware};
 use crate::model::api_key::{ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
 

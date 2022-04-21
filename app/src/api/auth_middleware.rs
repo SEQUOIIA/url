@@ -1,10 +1,11 @@
-use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, dev::{self, Service, ServiceRequest, ServiceResponse, Transform}, Scope, Responder, HttpResponse};
+use actix_web::{Error, dev::{self, Service, ServiceRequest, ServiceResponse, Transform}, HttpResponse};
 use std::future::{ready, Ready};
 use actix_web::body::EitherBody;
-use http::{HeaderValue, header::HeaderName};
 use futures_util::future::LocalBoxFuture;
 use crate::model::api_key::ApiKeyDb;
 use crate::web::DbPool;
+
+static API_KEY_HEADER : &str = "x-api-key";
 
 pub struct AuthMiddleware {
     pub pool: DbPool
@@ -45,15 +46,14 @@ impl<S, B> Service<ServiceRequest> for DefaultAuthMiddleware<S>
     dev::forward_ready!(service);
 
     fn call(&self, request: ServiceRequest) -> Self::Future {
-        if request.headers().contains_key("x-api-key") {
+        if request.headers().contains_key(API_KEY_HEADER) {
             use crate::model::api_key::db::api_keys::*;
             use crate::model::api_key::db::api_keys::dsl::api_keys;
-            use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, BelongingToDsl, SqliteConnection};
-            use diesel::r2d2::{self, ConnectionManager};
+            use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods};
 
             let conn = self.pool.get().map_err(actix_web::error::ErrorInternalServerError).unwrap();
             let keys : Vec<ApiKeyDb> = api_keys
-                .filter(key.eq(request.headers().get("x-api-key").unwrap().to_str().unwrap()))
+                .filter(key.eq(request.headers().get(API_KEY_HEADER).unwrap().to_str().unwrap()))
                 .limit(1)
                 .load::<ApiKeyDb>(&conn)
                 .expect("Unable to find API key entry");
