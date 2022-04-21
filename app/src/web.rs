@@ -65,6 +65,23 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
     if req.method().as_str() != "POST" {
         return Ok(HttpResponse::MethodNotAllowed().finish());
     }
+    let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
+
+    if req.headers().contains_key("x-api-key") {
+        use crate::model::api_key::db::api_keys::*;
+        use crate::model::api_key::db::api_keys::dsl::api_keys;
+        let keys : Vec<ApiKeyDb> = api_keys
+            .filter(key.eq(req.headers().get("x-api-key").unwrap().to_str().unwrap()))
+            .limit(1)
+            .load::<ApiKeyDb>(&conn)
+            .expect("Unable to find API key entry");
+
+        if keys.len() == 0 {
+            return Ok(HttpResponse::Unauthorized().finish());
+        }
+    } else {
+        return Ok(HttpResponse::Unauthorized().finish())
+    }
 
     let req_body : UrlRequest = match serde_json::from_slice(&body) {
         Ok(val) => val,
@@ -76,7 +93,6 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
 
     let id = url_id::<5>();
 
-    let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
     let db_entry = UrlDbInsert {
         id: id.clone(),
         url: req_body.url
@@ -142,12 +158,12 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
                 .load::<ApiKeyDb>(&conn)
                 .expect("Unable to find API key entry");
 
-            if keys.len() > 0 {
+            return if keys.len() > 0 {
                 let api_key_entry = keys.first().unwrap();
                 diesel::delete(api_keys.filter(key.eq(&api_key_entry.key))).execute(&conn);
-                return Ok(HttpResponse::Ok().finish());
+                Ok(HttpResponse::Ok().finish())
             } else {
-                return Ok(HttpResponse::NotFound().finish());
+                Ok(HttpResponse::NotFound().finish())
             }
         },
         _ => Ok(HttpResponse::MethodNotAllowed().finish())
