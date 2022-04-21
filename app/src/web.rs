@@ -2,15 +2,18 @@ use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, dev::{self
 use http::{HeaderValue, header::HeaderName};
 
 use std::future::{ready, Ready};
+use actix_web::web::Bytes;
 use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, BelongingToDsl, SqliteConnection};
 use diesel::r2d2::{self, ConnectionManager};
 use futures_util::future::LocalBoxFuture;
 use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
+use serde::Deserialize;
+use crate::api::{DefaultHeaders, AuthMiddleware};
 use crate::model::api_key::{ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
 
-type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 #[actix_web::main]
 pub async fn start_server() {
@@ -25,8 +28,8 @@ pub async fn start_server() {
             // enable logger
             .wrap(middleware::Logger::default())
             .wrap(DefaultHeaders)
-            .service(web::resource("/new").to(new_url_handler))
-            .service(web::resource("/key").to(key_handler))
+            .service(web::resource("/new").to(new_url_handler)).wrap(AuthMiddleware {pool: pool.clone()})
+            .service(web::resource("/key").to(key_handler)).wrap(AuthMiddleware {pool: pool.clone()})
             .service(web::resource("/{id}").to(url_handler))
     })
         .bind(("0.0.0.0", 8380)).unwrap()
@@ -66,31 +69,7 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
         return Ok(HttpResponse::MethodNotAllowed().finish());
     }
     let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
-
-    if req.headers().contains_key("x-api-key") {
-        use crate::model::api_key::db::api_keys::*;
-        use crate::model::api_key::db::api_keys::dsl::api_keys;
-        let keys : Vec<ApiKeyDb> = api_keys
-            .filter(key.eq(req.headers().get("x-api-key").unwrap().to_str().unwrap()))
-            .limit(1)
-            .load::<ApiKeyDb>(&conn)
-            .expect("Unable to find API key entry");
-
-        if keys.len() == 0 {
-            return Ok(HttpResponse::Unauthorized().finish());
-        }
-    } else {
-        return Ok(HttpResponse::Unauthorized().finish())
-    }
-
-    let req_body : UrlRequest = match serde_json::from_slice(&body) {
-        Ok(val) => val,
-        Err(err) => {
-            println!("{}", err);
-            return Ok(HttpResponse::BadRequest().finish());
-        }
-    };
-
+    let req_body : UrlRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
     let id = url_id::<5>();
 
     let db_entry = UrlDbInsert {
@@ -116,13 +95,7 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
     use crate::model::api_key::db::api_keys::dsl::api_keys;
     return match req.method().as_str() {
         "POST" => {
-            let req_body : ApiKeyPostRequest = match serde_json::from_slice(&body) {
-                Ok(val) => val,
-                Err(err) => {
-                    println!("{}", err);
-                    return Ok(HttpResponse::BadRequest().finish());
-                }
-            };
+            let req_body : ApiKeyPostRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
 
             let new_key = api_key::<64>();
             let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
@@ -143,13 +116,7 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
             Ok(HttpResponse::Ok().json(&resp))
         },
         "DELETE" => {
-            let req_body : ApiKeyDeleteRequest = match serde_json::from_slice(&body) {
-                Ok(val) => val,
-                Err(err) => {
-                    println!("{}", err);
-                    return Ok(HttpResponse::BadRequest().finish());
-                }
-            };
+            let req_body : ApiKeyDeleteRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
 
             let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
             let keys : Vec<ApiKeyDb> = api_keys
@@ -167,60 +134,5 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
             }
         },
         _ => Ok(HttpResponse::MethodNotAllowed().finish())
-    }
-}
-
-// There are two steps in middleware processing.
-// 1. Middleware initialization, middleware factory gets called with
-//    next service in chain as parameter.
-// 2. Middleware's call method gets called with normal request.
-pub struct DefaultHeaders;
-
-// Middleware factory is `Transform` trait from actix-service crate
-// `S` - type of the next service
-// `B` - type of response's body
-impl<S, B> Transform<S, ServiceRequest> for DefaultHeaders
-    where
-        S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
-        S::Future: 'static,
-        B: 'static,
-{
-    type Response = ServiceResponse<B>;
-    type Error = Error;
-    type InitError = ();
-    type Transform = DefaultHeadersMiddleware<S>;
-    type Future = Ready<Result<Self::Transform, Self::InitError>>;
-
-    fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(DefaultHeadersMiddleware { service }))
-    }
-}
-
-pub struct DefaultHeadersMiddleware<S> {
-    service: S,
-}
-
-impl<S, B> Service<ServiceRequest> for DefaultHeadersMiddleware<S>
-    where
-        S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
-        S::Future: 'static,
-        B: 'static,
-{
-    type Response = ServiceResponse<B>;
-    type Error = Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    dev::forward_ready!(service);
-
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let fut = self.service.call(req);
-
-        Box::pin(async move {
-            let mut res = fut.await?;
-
-            res.headers_mut().insert(HeaderName::from_static("server"), HeaderValue::from_static("url"));
-
-            Ok(res)
-        })
     }
 }
