@@ -8,9 +8,20 @@ pub struct ApiKey {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct UrlRequest {
+pub struct ApiKeyPostRequest {
     pub description : Option<String>
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct ApiKeyPostResponse {
+    pub key : String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ApiKeyDeleteRequest {
+    pub key : String
+}
+
 
 impl From<ApiKeyDb> for ApiKey {
     fn from(u: ApiKeyDb) -> Self {
@@ -48,7 +59,6 @@ impl From<ApiKey> for ApiKeyDb {
 #[derive(Insertable)]
 #[table_name="api_keys"]
 pub struct ApiKeyDbInsert {
-    pub id : i64,
     pub key : String,
     pub description : Option<String>
 }
@@ -58,7 +68,7 @@ pub struct ApiKeyDbInsert {
 // https://github.com/diesel-rs/diesel/issues/852
 // https://github.com/diesel-rs/diesel/issues/2638
 // https://github.com/diesel-rs/diesel/issues/1116
-mod db {
+pub mod db {
     use diesel::table;
     table! {
     api_keys (id) {

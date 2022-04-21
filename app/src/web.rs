@@ -8,6 +8,7 @@ use futures_util::future::LocalBoxFuture;
 use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
+use crate::model::api_key::{ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
 
 type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -25,6 +26,7 @@ pub async fn start_server() {
             .wrap(middleware::Logger::default())
             .wrap(DefaultHeaders)
             .service(web::resource("/new").to(new_url_handler))
+            .service(web::resource("/key").to(key_handler))
             .service(web::resource("/{id}").to(url_handler))
     })
         .bind(("0.0.0.0", 8380)).unwrap()
@@ -85,6 +87,71 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
         .expect("Unable to create URL entry");
 
     Ok(HttpResponse::Ok().body(format!("http://localhost:8380/{}", id)))
+}
+
+nano_id::gen!(
+    api_key,
+    86,
+    b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ&*/@!#$%^()-_=+[]{};:,.?"
+);
+
+async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
+    use crate::model::api_key::db::api_keys::*;
+    use crate::model::api_key::db::api_keys::dsl::api_keys;
+    return match req.method().as_str() {
+        "POST" => {
+            let req_body : ApiKeyPostRequest = match serde_json::from_slice(&body) {
+                Ok(val) => val,
+                Err(err) => {
+                    println!("{}", err);
+                    return Ok(HttpResponse::BadRequest().finish());
+                }
+            };
+
+            let new_key = api_key::<64>();
+            let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
+            let db_entry = ApiKeyDbInsert {
+                key: new_key.clone(),
+                description: req_body.description
+            };
+
+            diesel::insert_into(crate::model::api_key::db::api_keys::table)
+                .values(&db_entry)
+                .execute(&conn)
+                .expect("Unable to crate API key entry");
+
+            let resp = ApiKeyPostResponse {
+                key: new_key
+            };
+
+            Ok(HttpResponse::Ok().json(&resp))
+        },
+        "DELETE" => {
+            let req_body : ApiKeyDeleteRequest = match serde_json::from_slice(&body) {
+                Ok(val) => val,
+                Err(err) => {
+                    println!("{}", err);
+                    return Ok(HttpResponse::BadRequest().finish());
+                }
+            };
+
+            let conn = pool.get().map_err(actix_web::error::ErrorInternalServerError)?;
+            let keys : Vec<ApiKeyDb> = api_keys
+                .filter(key.eq(req_body.key))
+                .limit(1)
+                .load::<ApiKeyDb>(&conn)
+                .expect("Unable to find API key entry");
+
+            if keys.len() > 0 {
+                let api_key_entry = keys.first().unwrap();
+                diesel::delete(api_keys.filter(key.eq(&api_key_entry.key))).execute(&conn);
+                return Ok(HttpResponse::Ok().finish());
+            } else {
+                return Ok(HttpResponse::NotFound().finish());
+            }
+        },
+        _ => Ok(HttpResponse::MethodNotAllowed().finish())
+    }
 }
 
 // There are two steps in middleware processing.
