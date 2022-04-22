@@ -38,7 +38,7 @@ impl PartialEq for ApiKey {
     }
 }
 
-#[derive(Queryable, Identifiable)]
+#[derive(Queryable, Identifiable, Clone)]
 #[table_name="api_keys"]
 pub struct ApiKeyDb {
     pub id : i64,
