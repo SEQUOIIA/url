@@ -1,15 +1,15 @@
-use clap::{App, ArgMatches};
+use clap::{ArgMatches, Command};
 use tokio::runtime::Runtime;
 
 pub mod new;
 
 pub struct CommandData<'a> {
-    app: App<'a>,
+    app: Command<'a>,
     arg_matches : ArgMatches
 }
 
 impl<'a, 'b> CommandData<'a> {
-    pub fn new(app : App<'a>, arg_matches : ArgMatches) -> Self {
+    pub fn new(app : Command<'a>, arg_matches : ArgMatches) -> Self {
         Self {
             app,
             arg_matches,
