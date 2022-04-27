@@ -1,4 +1,5 @@
 use clap::{App, ArgMatches};
+use tokio::runtime::Runtime;
 
 pub mod new;
 
@@ -14,4 +15,11 @@ impl<'a, 'b> CommandData<'a> {
             arg_matches,
         }
     }
+}
+
+pub fn new_runtime() -> Runtime {
+    tokio::runtime::Builder::new_multi_thread()
+        .thread_name("seqtf_url-worker")
+        .enable_all()
+        .build().unwrap()
 }
