@@ -1,5 +1,7 @@
 use crate::commands::{CommandData, new_runtime};
 use serde::{Serialize, Deserialize};
+use anyhow::Result;
+use reqwest::{Error, Response};
 
 pub struct New;
 
@@ -13,11 +15,17 @@ impl<'a> New {
                 url: context.arg_matches.value_of("URL").unwrap().to_owned()
             };
 
-            let resp = client.post("http://localhost:8380/new")
-                .header("x-api-key", "")
+            let resp = match client.post(format!("{}/new", context.conf.api_endpoint))
+                .header("x-api-key", context.conf.get_api_key().unwrap())
                 .json(&req_data)
                 .send()
-                .await.unwrap();
+                .await {
+                Ok(val) => val,
+                Err(err) => {
+                    println!("{}", err);
+                    return ();
+                }
+            };
 
             if resp.status().eq(&401) {
                 println!("{}", "Unauthorised");

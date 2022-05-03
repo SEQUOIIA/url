@@ -1,18 +1,21 @@
 use clap::{ArgMatches, Command};
 use tokio::runtime::Runtime;
+use crate::config::Config;
 
 pub mod new;
 
 pub struct CommandData<'a> {
     app: Command<'a>,
-    arg_matches : ArgMatches
+    arg_matches : ArgMatches,
+    conf : Config
 }
 
 impl<'a, 'b> CommandData<'a> {
-    pub fn new(app : Command<'a>, arg_matches : ArgMatches) -> Self {
+    pub fn new(app : Command<'a>, arg_matches : ArgMatches, conf : Config) -> Self {
         Self {
             app,
             arg_matches,
+            conf
         }
     }
 }
