@@ -29,10 +29,12 @@ fn main() {
                 .subcommands( vec![
                     Command::new("create")
                         .about("Create a new API key")
-                        .arg(arg!([Description])),
+                        .arg(arg!(-d --description <DESCRIPTION> "Sets description of the created API key. Example: 'This key belongs to x user'").required(false)),
                     Command::new("delete")
                         .about("Delete existing API key")
                         .arg(arg!([Key])),
+                    Command::new("list")
+                        .about("List API keys")
                 ])
         );
 

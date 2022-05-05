@@ -5,7 +5,7 @@ use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
 use crate::api::{DefaultHeaders, AuthMiddleware};
-use crate::model::api_key::{ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
+use crate::model::api_key::{ApiKey, ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
 use crate::model::error::url_err_any;
 
 pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -98,6 +98,28 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
     use crate::model::api_key::db::api_keys::*;
     use crate::model::api_key::db::api_keys::dsl::api_keys;
     return match req.method().as_str() {
+        "GET" => {
+
+            let mut keys : Vec<ApiKeyDb> = web::block(move || {
+                let conn = pool.get().map_err(url_err_any)?;
+                api_keys
+                    .load::<ApiKeyDb>(&conn)
+                    .map_err(url_err_any)
+            }).await?
+                .map_err(actix_web::error::ErrorInternalServerError)?;
+
+           let keys_resp : Vec<ApiKey> = keys.iter()
+                .map(|a| {
+                    ApiKey {
+                        id: a.id,
+                        key: a.key.clone(),
+                        description: a.description.clone()
+                    }
+                }).collect();
+
+
+            Ok(HttpResponse::Ok().json(&keys_resp))
+        },
         "POST" => {
             let req_body : ApiKeyPostRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
 
