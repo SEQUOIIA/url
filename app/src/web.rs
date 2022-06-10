@@ -1,12 +1,16 @@
+use std::str::FromStr;
 use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, HttpResponse};
 use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, SqliteConnection};
 use diesel::r2d2::{self, ConnectionManager};
+use diesel::result::DatabaseErrorKind;
 use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
 use crate::schema;
 use log::info;
+use thiserror::private::DisplayAsDisplay;
 use crate::api::{DefaultHeaders, AuthMiddleware};
 use crate::model::api_key::{ApiKey, ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
-use crate::model::error::url_err_any;
+use crate::model::error::{url_err_any, url_err_request};
+use crate::model::error::Error::RequestError;
 
 pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -69,21 +73,45 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
         return Ok(HttpResponse::MethodNotAllowed().finish());
     }
     let req_body : UrlRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
-    let id = url_id::<5>();
+    // Make sure the URL given in the request body is valid
+    url::Url::parse(&req_body.url).map_err(url_err_request)?;
+
+    let id = match req_body.id {
+        Some(val) => val,
+        None => url_id::<5>()
+    };
 
     let db_entry = UrlDbInsert {
         id: id.clone(),
         url: req_body.url
     };
 
-    web::block( move || {
+    let db_resp = web::block( move || {
         let conn = pool.get().map_err(url_err_any)?;
         diesel::insert_into(schema::urls::table)
             .values(&db_entry)
             .execute(&conn)
             .map_err(url_err_any)
-    }).await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+    }).await?;
+    if let Err(val) = db_resp {
+        if let crate::model::error::Error::Any(inner_err) = &val {
+            let db_err : &diesel::result::Error = inner_err.downcast_ref().unwrap();
+            return if let diesel::result::Error::DatabaseError(kind, _) = db_err {
+                match kind {
+                    DatabaseErrorKind::UniqueViolation => {
+                        Err("URL name already in use. Try a different one".to_owned()).map_err(actix_web::error::ErrorBadRequest)
+                    }
+                    _ => {
+                        println!("{}", db_err.to_string());
+                        Err("Database error".to_owned()).map_err(actix_web::error::ErrorInternalServerError)
+                    }
+                }
+            } else {
+                println!("{}", val.err_msg());
+                Err(val).map_err(actix_web::error::ErrorInternalServerError)
+            }
+        }
+    }
 
     Ok(HttpResponse::Ok().body(format!("http://localhost:8380/{}", id)))
 }
@@ -100,7 +128,7 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
     return match req.method().as_str() {
         "GET" => {
 
-            let mut keys : Vec<ApiKeyDb> = web::block(move || {
+            let keys : Vec<ApiKeyDb> = web::block(move || {
                 let conn = pool.get().map_err(url_err_any)?;
                 api_keys
                     .load::<ApiKeyDb>(&conn)
@@ -135,7 +163,7 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
                     .values(&db_entry)
                     .execute(&conn)
                     .map_err(url_err_any)
-            }).await
+            }).await?
                 .map_err(actix_web::error::ErrorInternalServerError)?;
 
 
@@ -167,7 +195,7 @@ async fn key_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Byte
                     diesel::delete(api_keys.filter(key.eq(&api_key_entry.key)))
                         .execute(&conn)
                         .map_err(url_err_any)
-                }).await?;
+                }).await?.map_err(actix_web::error::ErrorInternalServerError)?;;
 
                 Ok(HttpResponse::Ok().finish())
             } else {

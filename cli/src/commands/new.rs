@@ -12,7 +12,10 @@ impl<'a> New {
             let client = reqwest::Client::new();
 
             let req_data = RequestData {
-                url: context.arg_matches.value_of("URL").unwrap().to_owned()
+                url: context.arg_matches.value_of("URL").unwrap().to_owned(),
+                id: context.arg_matches.value_of("name").map_or(None, |val| {
+                    Some(val.to_owned())
+                })
             };
 
             let resp = match client.post(format!("{}/new", context.conf.api_endpoint))
@@ -41,5 +44,6 @@ impl<'a> New {
 
 #[derive(Serialize, Deserialize)]
 struct RequestData {
-    url : String
+    url : String,
+    id : Option<String>
 }
