@@ -1,5 +1,6 @@
 use clap::{arg, command, Command};
 use crate::commands::CommandData;
+use crate::commands::delete::Delete;
 use crate::commands::key::Key;
 use crate::commands::new::New;
 
@@ -20,6 +21,14 @@ fn main() {
                 .arg(arg!(-n --"name" <NAME> "Optional custom name"))
                 .arg(arg!(-a --"api-key" <APIKEY> "Optionally specify API key. Can also be set via environment variable (SEQ_URL_API_KEY) or config file").required(false))
                 .arg(arg!([URL]))
+
+        )
+        .subcommand(
+            Command::new("delete")
+                .about("Delete short URL")
+                .arg_required_else_help(true)
+                .arg(arg!(-a --"api-key" <APIKEY> "Optionally specify API key. Can also be set via environment variable (SEQ_URL_API_KEY) or config file").required(false))
+                .arg(arg!([NAME]))
 
         )
         .subcommand(
@@ -45,6 +54,10 @@ fn main() {
         Some(("new", sub_matches)) => {
             let context = CommandData::new(app.clone(), sub_matches.clone(), conf);
             New::handle(context);
+        },
+        Some(("delete", sub_matches)) => {
+            let context = CommandData::new(app.clone(), sub_matches.clone(), conf);
+            Delete::handle(context);
         },
         Some(("key", sub_matches)) => {
             let context = CommandData::new(app.clone(), sub_matches.clone(), conf);

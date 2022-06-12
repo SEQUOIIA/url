@@ -3,6 +3,7 @@ use tokio::runtime::Runtime;
 use crate::config::Config;
 
 pub mod new;
+pub mod delete;
 pub mod key;
 
 pub struct CommandData<'a> {

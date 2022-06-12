@@ -3,7 +3,7 @@ use actix_web::{middleware, web, App, HttpRequest, HttpServer, Error, HttpRespon
 use diesel::{RunQueryDsl, QueryDsl, ExpressionMethods, SqliteConnection};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::DatabaseErrorKind;
-use crate::model::url::{UrlDb, UrlDbInsert, UrlRequest};
+use crate::model::url::{UrlDb, UrlDbInsert, UrlDeleteRequest, UrlRequest};
 use crate::schema;
 use log::info;
 use thiserror::private::DisplayAsDisplay;
@@ -28,6 +28,7 @@ pub async fn start_server() {
             .wrap(middleware::Logger::default())
             .wrap(DefaultHeaders)
             .service(web::resource("/new").to(new_url_handler).wrap(AuthMiddleware {pool: pool.clone()}))
+            .service(web::resource("/delete").to(delete_url_handler).wrap(AuthMiddleware {pool: pool.clone()}))
             .service(web::resource("/key").to(key_handler).wrap(AuthMiddleware {pool: pool.clone()}))
             .service(web::resource("/{id}").to(url_handler))
     })
@@ -114,6 +115,41 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
     }
 
     Ok(HttpResponse::Ok().body(format!("http://localhost:8380/{}", id)))
+}
+
+async fn delete_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
+    use crate::schema::urls::*;
+    use crate::schema::urls::dsl::urls;
+
+    if req.method().as_str() != "DELETE" {
+        return Ok(HttpResponse::MethodNotAllowed().finish());
+    }
+    let req_body : UrlDeleteRequest = serde_json::from_slice(&body).map_err(actix_web::error::ErrorBadRequest)?;
+
+    let db_resp = web::block( move || {
+        let conn = pool.get().map_err(url_err_any)?;
+        diesel::delete(urls.filter(id.eq(req_body.id)))
+            .execute(&conn)
+            .map_err(url_err_any)
+    }).await?;
+    if let Err(val) = db_resp {
+        if let crate::model::error::Error::Any(inner_err) = &val {
+            let db_err : &diesel::result::Error = inner_err.downcast_ref().unwrap();
+            return if let diesel::result::Error::DatabaseError(kind, _) = db_err {
+                println!("{}", db_err.to_string());
+                Err("Database error".to_owned()).map_err(actix_web::error::ErrorInternalServerError)
+            } else {
+                println!("{}", val.err_msg());
+                Err(val).map_err(actix_web::error::ErrorInternalServerError)
+            }
+        }
+    } else {
+        if db_resp.unwrap() == 0 {
+            return Ok(HttpResponse::NotFound().finish());
+        }
+    }
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 nano_id::gen!(
