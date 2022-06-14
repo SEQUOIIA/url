@@ -1,6 +1,7 @@
 use db::api_keys;
 use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct ApiKey {
     pub id : i64,
     pub key : String,

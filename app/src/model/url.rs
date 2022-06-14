@@ -12,6 +12,11 @@ pub struct UrlRequest {
     pub url : String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct UrlDeleteRequest {
+    pub id : String
+}
+
 impl From<UrlDb> for Url {
     fn from(u: UrlDb) -> Self {
         Self {
