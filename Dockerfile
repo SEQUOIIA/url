@@ -1,43 +1,55 @@
-FROM rust:1.61 as builder
+ARG BASE_IMAGE=rust:1.61.0-slim-buster
 
-RUN USER=root cargo new --bin deps-caching
-WORKDIR /deps-caching
-RUN USER=root cargo new --bin app
-RUN USER=root cargo new --bin cli
-COPY ./Cargo.toml ./Cargo.toml
-COPY ./app/Cargo.toml ./app/Cargo.toml
-COPY ./cli/Cargo.toml ./cli/Cargo.toml
-COPY ./Cargo.lock ./Cargo.lock
-RUN cargo build --release
-RUN rm -rf src && rm -rf app/src && rm -rf cli/src
-
+FROM $BASE_IMAGE as planner
+WORKDIR app
+RUN cargo install cargo-chef --version 0.1.35
 COPY . .
+RUN cargo chef prepare  --recipe-path recipe.json
 
-RUN rm ./target/release/deps/seqtf_url*
-RUN cargo build --bin seqtf_url --release --offline
+FROM $BASE_IMAGE as cacher
+WORKDIR app
+RUN cargo install cargo-chef --version 0.1.35
+RUN apt update && apt install -y ca-certificates wget gcc libssl-dev libc6-dev pkg-config libsqlite3-0 libsqlite3-dev
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
-# App assembling
-FROM debian:buster-slim
-ARG APP=/usr/src/app
+FROM $BASE_IMAGE as builder
+WORKDIR app
+RUN apt update && apt install -y ca-certificates wget gcc libssl-dev libc6-dev pkg-config libsqlite3-0 libsqlite3-dev
+COPY . .
+# Copy over the cached dependencies
+COPY --from=cacher /app/target target
+COPY --from=cacher $CARGO_HOME $CARGO_HOME
+RUN cargo build --bin seqtf_url --release
 
-RUN apt-get update \
-    && apt-get install -y ca-certificates tzdata libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
+FROM $BASE_IMAGE as runtime-deps
+RUN cd /tmp && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        # install only deps
+        curl \
+        ca-certificates \
+        openssl \
+        && \
+    apt-get download \
+        \
+        pkg-config \
+        libsqlite3-0 \
+        libsqlite3-dev \
+        && \
+    mkdir -p /dpkg/var/lib/dpkg/status.d/ && \
+    for deb in *.deb; do \
+        package_name=$(dpkg-deb -I ${deb} | awk '/^ Package: .*$/ {print $2}'); \
+        echo "Process: ${package_name}"; \
+        dpkg --ctrl-tarfile $deb | tar -Oxf - ./control > /dpkg/var/lib/dpkg/status.d/${package_name}; \
+        dpkg --extract $deb /dpkg || exit 10; \
+    done
 
-EXPOSE 8080
+# remove not needed files extracted from deb packages like man pages and docs etc.
+RUN find /dpkg/ -type d -empty -delete && \
+    rm -r /dpkg/usr/share/doc/
 
-ENV TZ=Etc/UTC
-ENV APP_USER=url
-
-RUN groupadd $APP_USER \
-    && useradd -g $APP_USER $APP_USER \
-    && mkdir -p ${APP}
-
-COPY --from=builder /deps-caching/target/release/seqtf_url ${APP}/seqtf_url
-
-RUN chown -R $APP_USER:$APP_USER ${APP}
-
-USER $APP_USER
-WORKDIR ${APP}
-
+FROM gcr.io/distroless/cc-debian10
+COPY --from=runtime-deps ["/dpkg/", "/"]
+COPY --from=builder /app/target/release/seqtf_url /
 CMD ["./seqtf_url"]
