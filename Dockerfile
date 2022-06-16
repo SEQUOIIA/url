@@ -51,5 +51,6 @@ RUN find /dpkg/ -type d -empty -delete && \
 
 FROM gcr.io/distroless/cc-debian10
 COPY --from=runtime-deps ["/dpkg/", "/"]
-COPY --from=builder /app/target/release/seqtf_url /
+COPY --from=builder /app/target/release/seqtf_url /app/seqtf_url
+WORKDIR /app
 CMD ["./seqtf_url"]
