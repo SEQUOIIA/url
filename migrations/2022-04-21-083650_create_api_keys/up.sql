@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS api_keys (
-                                    id BIGINT NOT NULL PRIMARY KEY AUTOINCREMENT,
+                                    id BIGINT NOT NULL PRIMARY KEY,
                                     key TEXT NOT NULL UNIQUE,
                                     description TEXT
 );
