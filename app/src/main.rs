@@ -5,6 +5,7 @@ extern crate diesel;
 #[macro_use]
 extern crate diesel_migrations;
 
+mod config;
 mod model;
 mod api;
 mod web;

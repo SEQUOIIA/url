@@ -25,3 +25,4 @@ url = "2.2.2"
 nano-id = "0.2.0"
 getrandom = "0.2.6"
 thiserror = "1.0"
+config = { version = "0.13.1", features = ["yaml"] }

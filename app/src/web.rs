@@ -22,9 +22,12 @@ pub async fn start_server() {
         .build(manager)
         .expect("Failed to create pool.");
 
+
     HttpServer::new(move || {
+        let app_conf = crate::config::load_conf().unwrap();
         App::new()
             .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(app_conf))
             // enable logger
             .wrap(middleware::Logger::default())
             .wrap(DefaultHeaders)
@@ -35,7 +38,7 @@ pub async fn start_server() {
     })
         .bind(("0.0.0.0", 8380)).unwrap()
         .run()
-        .await;
+        .await.unwrap();
 }
 
 async fn url_handler(req: HttpRequest, pool: web::Data<DbPool>) -> Result<HttpResponse, Error> {
@@ -70,7 +73,7 @@ nano_id::gen!(
     b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 );
 
-async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
+async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, conf : web::Data<crate::config::Config>, body : web::Bytes) -> Result<HttpResponse, Error> {
     if req.method().as_str() != "POST" {
         return Ok(HttpResponse::MethodNotAllowed().finish());
     }
@@ -115,7 +118,7 @@ async fn new_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::
         }
     }
 
-    Ok(HttpResponse::Ok().body(format!("http://localhost:8380/{}", id)))
+    Ok(HttpResponse::Ok().body(format!("{}/{}", &conf.hostname, id)))
 }
 
 async fn delete_url_handler(req: HttpRequest, pool: web::Data<DbPool>, body : web::Bytes) -> Result<HttpResponse, Error> {
