@@ -9,6 +9,7 @@ use log::info;
 use thiserror::private::DisplayAsDisplay;
 use crate::api::{DefaultHeaders, AuthMiddleware};
 use crate::model::api_key::{ApiKey, ApiKeyDb, ApiKeyDbInsert, ApiKeyDeleteRequest, ApiKeyPostRequest, ApiKeyPostResponse};
+use crate::model::db::{DATABASE_URL, get_db_path};
 use crate::model::error::{url_err_any, url_err_request};
 use crate::model::error::Error::RequestError;
 
@@ -16,7 +17,7 @@ pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 #[actix_web::main]
 pub async fn start_server() {
-    let manager = ConnectionManager::<SqliteConnection>::new(crate::model::db::DATABASE_URL);
+    let manager = ConnectionManager::<SqliteConnection>::new(format!("{}/{}", get_db_path(), DATABASE_URL));
     let pool = r2d2::Pool::builder()
         .build(manager)
         .expect("Failed to create pool.");

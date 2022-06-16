@@ -18,7 +18,7 @@ fn main() {
             Command::new("new")
                 .about("Create new short URL")
                 .arg_required_else_help(true)
-                .arg(arg!(-n --"name" <NAME> "Optional custom name"))
+                .arg(arg!(-n --"name" <NAME> "Optional custom name").required(false))
                 .arg(arg!(-a --"api-key" <APIKEY> "Optionally specify API key. Can also be set via environment variable (SEQ_URL_API_KEY) or config file").required(false))
                 .arg(arg!([URL]))
 
