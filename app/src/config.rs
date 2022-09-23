@@ -10,7 +10,7 @@ pub struct Config {
 pub fn load_conf() -> Result<Config, ConfigError> {
     let settings = config::Config::builder()
         .add_source(config::Environment::with_prefix("URL"))
-        .add_source(config::File::with_name(format!("{}/{}", get_db_path(), "config.yaml").as_str()))
+        .add_source(config::File::with_name(format!("{}/{}", get_db_path(), "config.yaml").as_str()).required(false))
         .build()
         .unwrap();
 
